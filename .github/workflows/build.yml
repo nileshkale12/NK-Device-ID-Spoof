@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "tools/device-id-spoofer-ios/**"
-      - ".github/workflows/build.yml"
+      - "**"
+      - "!README.md"
 
 jobs:
   build:
@@ -14,14 +14,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Theos
-        uses: theos/actions/install@master
-        with:
-          ios-version: "16.5"
-
-      - name: Build rootless .deb
-        working-directory: tools/device-id-spoofer-ios
         env:
           THEOS: ${{ github.workspace }}/theos
+        run: |
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+          git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
+          git clone --depth=1 https://github.com/theos/sdks.git "$THEOS/sdks"
+
+      - name: Build rootless .deb
+        env:
           THEOS_PACKAGE_SCHEME: rootless
         run: |
           make clean package FINALPACKAGE=1
@@ -30,4 +31,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NKDeviceIDChangerIOS-rootless
-          path: tools/device-id-spoofer-ios/packages/*.deb
+          path: packages/*.deb
