@@ -34,7 +34,17 @@
 
 static NSString * const kPrefsDomain = @"com.nileshkale.deviceidchangerios";
 
-static NSDictionary *NKLoadConfig(void) {
+// TEMPORARY diagnostic: writes a plain file every time the hook fires, with
+// exactly what it read at each step. No log viewer / Frida dependency --
+// just `cat` it over SSH. Remove once the core spoof is confirmed working.
+static void NKDiag(NSString *line) {
+    NSString *path = @"/var/mobile/nkdevice_diag.txt";
+    NSString *existing = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    NSString *stamped = [NSString stringWithFormat:@"[%@] %@\n", [NSDate date], line];
+    [[existing stringByAppendingString:stamped] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+static NSDictionary *NKLoadConfig(NSString *bundleIDForDiag) {
     CFPropertyListRef enabledRef = CFPreferencesCopyAppValue(
         CFSTR("Enabled"), (__bridge CFStringRef)kPrefsDomain);
     CFPropertyListRef bundlesRef = CFPreferencesCopyAppValue(
@@ -42,6 +52,15 @@ static NSDictionary *NKLoadConfig(void) {
 
     BOOL enabled = enabledRef ? [(__bridge NSNumber *)enabledRef boolValue] : NO;
     NSDictionary *bundles = bundlesRef ? (__bridge_transfer NSDictionary *)bundlesRef : nil;
+
+    NKDiag([NSString stringWithFormat:
+        @"hook fired for bundleID=%@ | enabledRef=%@ (enabled=%d) | bundlesRef=%@ (class=%@)",
+        bundleIDForDiag,
+        enabledRef ? @"present" : @"NIL",
+        enabled,
+        bundlesRef ? @"present" : @"NIL",
+        bundles ? NSStringFromClass([bundles class]) : @"n/a"]);
+
     if (enabledRef) CFRelease(enabledRef);
 
     if (!enabled || ![bundles isKindOfClass:[NSDictionary class]]) {
@@ -52,12 +71,13 @@ static NSDictionary *NKLoadConfig(void) {
 
 static NSUUID *NKFakeIDFVForCurrentBundle(void) {
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    if (bundleID.length == 0) return nil;
+    if (bundleID.length == 0) { NKDiag(@"bundleIdentifier is EMPTY"); return nil; }
 
-    NSDictionary *bundles = NKLoadConfig();
+    NSDictionary *bundles = NKLoadConfig(bundleID);
     if (!bundles) return nil;
 
     NSDictionary *entry = bundles[bundleID];
+    NKDiag([NSString stringWithFormat:@"bundles dict keys=%@ | entry for %@ = %@", bundles.allKeys, bundleID, entry]);
     if (![entry isKindOfClass:[NSDictionary class]]) return nil;
 
     NSString *value = entry[@"IDFV"];
@@ -73,6 +93,7 @@ static NSUUID *NKFakeIDFVForCurrentBundle(void) {
 %hook UIDevice
 
 - (NSUUID *)identifierForVendor {
+    NKDiag(@"=== hook entered ===");
     NSUUID *fake = NKFakeIDFVForCurrentBundle();
     NSUUID *real = %orig;
     if (fake) {
