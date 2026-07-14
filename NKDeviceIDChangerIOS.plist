@@ -1,0 +1,9 @@
+{
+  Filter = {
+    Bundles = (
+      /* Add the bundle ID of every app you want targetable, e.g.:
+         "com.target.app1", "com.target.app2" */
+      "com.example.REPLACE_ME"
+    );
+  };
+}

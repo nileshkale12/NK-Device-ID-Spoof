@@ -1,0 +1,11 @@
+Package: com.nileshkale.deviceidchangerios
+Name: NK DeviceID Changer (iOS)
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Authorized-testing tool that spoofs identifierForVendor (IDFV) per target app on a jailbroken iPhone, for exercising device-binding / fraud-scoring / reinstall-detection logic during pentest engagements. Rootless (Dopamine/palera1n) only. See companion frida/ios_device_id_hook.js for IDFA/Keychain-UUID/carrier-info hooking.
+Maintainer: Nilesh Kale
+Author: Nilesh Kale
+Section: Tweaks
+Depends: firmware (>= 15.0), mobilesubstrate
+Homepage: https://github.com/
+Icon: file:///var/jb/Library/PreferenceLoader/ControlCenter.bundle/icon.png

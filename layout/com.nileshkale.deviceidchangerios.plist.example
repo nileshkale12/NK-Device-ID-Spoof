@@ -1,0 +1,7 @@
+{
+  "Enabled" = 1;
+  "Bundles" = {
+    "com.example.app1" = { "IDFV" = "5A9C1F3E-2B4D-4E1A-9C3F-1D2E3F4A5B6C"; };
+    "com.example.app2" = { "IDFV" = "random"; };
+  };
+}

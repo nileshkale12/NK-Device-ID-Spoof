@@ -1,0 +1,33 @@
+name: Build NK DeviceID Changer (iOS)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/device-id-spoofer-ios/**"
+      - ".github/workflows/build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Theos
+        uses: theos/actions/install@master
+        with:
+          ios-version: "16.5"
+
+      - name: Build rootless .deb
+        working-directory: tools/device-id-spoofer-ios
+        env:
+          THEOS: ${{ github.workspace }}/theos
+          THEOS_PACKAGE_SCHEME: rootless
+        run: |
+          make clean package FINALPACKAGE=1
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NKDeviceIDChangerIOS-rootless
+          path: tools/device-id-spoofer-ios/packages/*.deb
