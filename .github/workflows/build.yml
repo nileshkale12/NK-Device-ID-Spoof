@@ -21,6 +21,12 @@ jobs:
           git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
           rm -rf "$THEOS/sdks"
           git clone --depth=1 https://github.com/theos/sdks.git "$THEOS/sdks"
+          # Theos needs a separate Linux-hosted iOS cross-compiler (clang/cctools) —
+          # theos/theos only provides the build-system scripts. Same toolchain
+          # install-theos itself fetches for a non-Swift Linux setup.
+          sudo apt-get update -y
+          sudo apt-get install -y libtinfo6
+          curl -sL https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz | tar -xJf - -C "$THEOS/toolchain/"
 
       - name: Build rootless .deb
         env:
