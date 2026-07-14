@@ -53,14 +53,17 @@ function hook (not a boot-time file patch), flipping `Enabled` off takes
 effect on the *next launch* of a targeted app — no reboot needed, unlike
 the Android SSAID rewrite which only applies at `system_server` boot.
 
-**Worse than the Android module in one way**: MobileSubstrate decides
-*which processes get this dylib injected at all* via a filter plist
-(`NKDeviceIDChangerIOS.plist`), separately from the CFPreferences config
-that decides *what to return*. Adding a brand-new target app means
-editing **both** files and respringing — there's no single "just add a
-package to a JSON list" convenience the way Zygisk's `preAppSpecialize`
-gives Android (Zygisk injects into every app process generically; Substrate
-needs an explicit bundle-ID allowlist). Keep the two lists in sync.
+**Slightly different from the Android module, not actually worse**:
+MobileSubstrate decides *which processes get this dylib injected at all*
+via a filter plist (`NKDeviceIDChangerIOS.plist`), separately from the
+CFPreferences config that decides *what to return*. Adding a brand-new
+target app means updating **both** files — but neither requires a
+rebuild: Theos installs the filter plist as a plain file at
+`/var/jb/Library/MobileSubstrate/DynamicLibraries/NKDeviceIDChangerIOS.plist`,
+which Substrate re-reads at every app launch, so editing it live +
+respringing is enough (no reinstall). **`manage-targets.sh`** (run
+on-device over SSH/NewTerm/Filza) wraps both edits + the respring into
+one command — see below.
 
 ## Building it
 
@@ -89,19 +92,39 @@ make clean package FINALPACKAGE=1
 # .deb lands in packages/
 ```
 
-## Before first install — edit two files
+## Before first install
 
-1. **`NKDeviceIDChangerIOS.plist`** (MobileSubstrate filter) — replace
-   the placeholder bundle ID with every app you want targetable:
-   ```
-   Bundles = ( "com.target.app1", "com.target.app2" );
-   ```
-2. **`layout/com.nileshkale.deviceidchangerios.plist.example`** — copy to
-   the actual prefs path on-device (`/var/jb/var/mobile/Library/Preferences/com.nileshkale.deviceidchangerios.plist`)
-   and set the same bundle IDs with their fake IDFV values (or `"random"`).
+The `.deb` ships with a placeholder bundle ID (`com.example.REPLACE_ME`)
+in `NKDeviceIDChangerIOS.plist`, so it targets nothing useful until you
+add real apps. You can either:
 
-Rebuild after step 1 (the filter plist is baked into the `.deb`); step 2
-can be edited live on-device via SSH or Filza without rebuilding.
+- Edit `NKDeviceIDChangerIOS.plist` before building (put your real target
+  bundle IDs in the `Bundles` array), or
+- Build once with the placeholder, install it, then use
+  **`manage-targets.sh`** on-device to add/remove targets afterward —
+  no rebuild needed either way (see below).
+
+## Adding / removing target apps at any time (no rebuild)
+
+Copy `manage-targets.sh` onto the device (or `cat` it in over SSH) and
+run it there — it edits both the filter plist and the prefs plist and
+handles the respring for you:
+
+```sh
+chmod +x manage-targets.sh
+
+./manage-targets.sh add com.target.app1                  # random IDFV
+./manage-targets.sh add com.target.app2 5A9C1F3E-2B4D-4E1A-9C3F-1D2E3F4A5B6C
+./manage-targets.sh list                                  # see current targets
+./manage-targets.sh remove com.target.app1                # stop targeting it
+
+./manage-targets.sh disable   # global kill switch off — no respring needed
+./manage-targets.sh enable    # global kill switch on  — no respring needed
+```
+
+`add`/`remove` trigger a respring (Substrate re-scans the filter plist at
+each app launch, not continuously); `enable`/`disable` don't need one,
+since the prefs plist is read live on every call.
 
 ## Install via Sileo
 
@@ -112,10 +135,9 @@ Same as any tweak `.deb` (Choicy, Shadow, etc.):
 2. Open it in **Filza** → tap the file → **Install with Sileo**, or open
    **Sileo** → the "…" menu → **Install `.deb`** and pick the file.
 3. Sileo installs it and offers to respring — accept.
-4. Push the real prefs plist (step 2 above) to
-   `/var/jb/var/mobile/Library/Preferences/com.nileshkale.deviceidchangerios.plist`
-   via SSH/Filza. No respring needed for prefs changes, only for adding
-   new bundle IDs to the filter plist (requires rebuilding + reinstalling).
+4. Use `manage-targets.sh add <bundle.id>` (see above) to target your
+   first app(s) — it writes the prefs plist and filter plist for you and
+   resprings automatically.
 
 If you want it in your own Sileo repo instead of a one-off sideload, host
 the `.deb` alongside a `Packages`/`Release` index the way any personal
@@ -124,11 +146,26 @@ other tweak.
 
 ## Verifying / restoring
 
-- Verify: install a "device info" app (or the target app's own
-  diagnostics screen if it displays IDFV) on both a targeted and a
-  non-targeted bundle ID, confirm only the targeted one changes.
-- Restore: set `Enabled = 0` in the prefs plist (or delete it, or
-  uninstall via Sileo). No reboot required, unlike the Android module —
+- **Verify via console log** (easiest — shows real vs. spoofed side by
+  side): the hook logs every time it fires. Over SSH:
+  ```sh
+  deviceconsole | grep NKDeviceIDChangerIOS
+  ```
+  Launch the target app — you should see
+  `identifierForVendor real=<uuid> spoofed=<uuid>` with two different values.
+- **Verify via Frida** (no target-app UI needed):
+  ```sh
+  frida -U -f com.target.app -e --no-pause -e "
+  console.log(ObjC.classes.UIDevice.currentDevice().identifierForVendor().UUIDString().toString());
+  "
+  ```
+  Run once with `./manage-targets.sh disable` (real value), then
+  `./manage-targets.sh enable` (should print the fake UUID instead) —
+  just relaunch the app between the two, no rebuild/respring needed for
+  the enable/disable toggle itself.
+- Restore: `./manage-targets.sh remove <bundle.id>` (stop targeting that
+  app) or `./manage-targets.sh disable` (global off, keeps the target
+  list intact for later). No reboot required, unlike the Android module —
   next launch of the target app sees its real IDFV again.
 
 ## Authorized use only
