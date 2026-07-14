@@ -74,12 +74,12 @@ static NSUUID *NKFakeIDFVForCurrentBundle(void) {
 
 - (NSUUID *)identifierForVendor {
     NSUUID *fake = NKFakeIDFVForCurrentBundle();
+    NSUUID *real = %orig;
     if (fake) {
-        NSLog(@"[NKDeviceIDChangerIOS] identifierForVendor real=%@ spoofed=%@",
-              %orig, fake);
+        NSLog(@"[NKDeviceIDChangerIOS] identifierForVendor real=%@ spoofed=%@", real, fake);
         return fake;
     }
-    return %orig;
+    return real;
 }
 
 %end
